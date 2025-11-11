@@ -61,3 +61,7 @@ tmp/
 
 # Seed scripts with sensitive data
 api-server/src/scripts/seed.js
+
+# Test scripts
+testfeedback.js
+employee-ui/testfeedback.js

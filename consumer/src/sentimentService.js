@@ -15,9 +15,10 @@ const getPredictions = async (texts) => {
   }
 };
 
-const getSentimentLabel = (score) => {
-  if (score >= 3.5) return 'positive';
-  if (score >= 2.5) return 'neutral';
+const getSentimentLabel = (score, threshold = 2.5) => {
+  const positiveThreshold = threshold + 1.0;
+  if (score >= positiveThreshold) return 'positive';
+  if (score >= threshold) return 'neutral';
   return 'negative';
 };
 

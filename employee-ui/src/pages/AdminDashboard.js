@@ -11,6 +11,7 @@ function AdminDashboard() {
   const [alerts, setAlerts] = useState([]);
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [config, setConfig] = useState(null);
   const navigate = useNavigate();
 
   const userName = localStorage.getItem('userName');
@@ -23,17 +24,19 @@ function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const [statsRes, driversRes, alertsRes, feedbackRes] = await Promise.all([
+      const [statsRes, driversRes, alertsRes, feedbackRes, configRes] = await Promise.all([
         api.get('/admin/stats'),
         api.get('/admin/drivers?sort=avg_score&order=desc'),
         api.get('/admin/alerts'),
-        api.get('/admin/feedback?limit=100')
+        api.get('/admin/feedback?limit=100'),
+        api.get('/config')
       ]);
 
       setStats(statsRes.data.data);
       setDrivers(driversRes.data.data.drivers);
       setAlerts(alertsRes.data.data);
       setFeedbacks(feedbackRes.data.data.feedbacks);
+      setConfig(configRes.data.data);
     } catch (err) {
       console.error('Failed to fetch data:', err);
     } finally {
@@ -113,13 +116,19 @@ function AdminDashboard() {
           >
             Feedback
           </button>
+          <button 
+            className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('settings')}
+          >
+            Settings
+          </button>
         </div>
 
-        {/* Tab Content */}
         {activeTab === 'overview' && <OverviewTab stats={stats} drivers={drivers} />}
         {activeTab === 'drivers' && <DriversTab drivers={drivers} />}
         {activeTab === 'alerts' && <AlertsTab alerts={alerts} />}
         {activeTab === 'feedback' && <FeedbackTab feedbacks={feedbacks} />}
+        {activeTab === 'settings' && <SettingsTab config={config} onUpdate={fetchData} />}
       </div>
     </div>
   );
@@ -368,6 +377,131 @@ function FeedbackTab({ feedbacks }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function SettingsTab({ config, onUpdate }) {
+  const [alertThreshold, setAlertThreshold] = useState(config?.alert_threshold || 2.5);
+  const [emaAlpha, setEmaAlpha] = useState(config?.ema_alpha || 0.25);
+  const [alertCooldown, setAlertCooldown] = useState(config?.alert_cooldown_s || 3600);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (config) {
+      setAlertThreshold(config.alert_threshold || 2.5);
+      setEmaAlpha(config.ema_alpha || 0.25);
+      setAlertCooldown(config.alert_cooldown_s || 3600);
+    }
+  }, [config]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage('');
+    
+    try {
+      await api.patch('/config', {
+        alert_threshold: parseFloat(alertThreshold),
+        ema_alpha: parseFloat(emaAlpha),
+        alert_cooldown_s: parseInt(alertCooldown)
+      });
+      
+      setMessage('Settings saved successfully!');
+      setTimeout(() => setMessage(''), 3000);
+      onUpdate();
+    } catch (error) {
+      setMessage('Failed to save settings: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <h2>System Configuration</h2>
+      
+      {message && (
+        <div className={`alert ${message.includes('success') ? 'alert-success' : 'alert-error'}`}>
+          {message}
+        </div>
+      )}
+
+      <div style={{ maxWidth: '600px' }}>
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+            Alert Threshold
+          </label>
+          <p style={{ fontSize: '14px', color: '#666', marginBottom: '10px' }}>
+            Drivers with average score below this threshold will trigger alerts. 
+            This also defines sentiment ranges: Negative (&lt; threshold), Neutral (threshold to threshold+1), Positive (≥ threshold+1)
+          </p>
+          <input
+            type="number"
+            min="1"
+            max="4"
+            step="0.1"
+            value={alertThreshold}
+            onChange={(e) => setAlertThreshold(e.target.value)}
+            style={{ width: '100%', padding: '8px', fontSize: '16px' }}
+          />
+          <p style={{ fontSize: '12px', color: '#999', marginTop: '5px' }}>
+            Current: {alertThreshold} (Range: 1.0 - 4.0)
+          </p>
+        </div>
+
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+            EMA Alpha (Smoothing Factor)
+          </label>
+          <p style={{ fontSize: '14px', color: '#666', marginBottom: '10px' }}>
+            Weight given to new feedback in exponential moving average calculation. 
+            Higher values make scores more responsive to recent feedback.
+          </p>
+          <input
+            type="number"
+            min="0.1"
+            max="1"
+            step="0.05"
+            value={emaAlpha}
+            onChange={(e) => setEmaAlpha(e.target.value)}
+            style={{ width: '100%', padding: '8px', fontSize: '16px' }}
+          />
+          <p style={{ fontSize: '12px', color: '#999', marginTop: '5px' }}>
+            Current: {emaAlpha} (Range: 0.1 - 1.0)
+          </p>
+        </div>
+
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+            Alert Cooldown (seconds)
+          </label>
+          <p style={{ fontSize: '14px', color: '#666', marginBottom: '10px' }}>
+            Minimum time between alerts for the same driver to prevent alert spam.
+          </p>
+          <input
+            type="number"
+            min="60"
+            max="86400"
+            step="60"
+            value={alertCooldown}
+            onChange={(e) => setAlertCooldown(e.target.value)}
+            style={{ width: '100%', padding: '8px', fontSize: '16px' }}
+          />
+          <p style={{ fontSize: '12px', color: '#999', marginTop: '5px' }}>
+            Current: {(alertCooldown / 3600).toFixed(1)} hours (Range: 1 minute - 24 hours)
+          </p>
+        </div>
+
+        <button 
+          onClick={handleSave} 
+          disabled={saving}
+          className="btn btn-primary"
+          style={{ width: '100%', padding: '12px', fontSize: '16px' }}
+        >
+          {saving ? 'Saving...' : 'Save Settings'}
+        </button>
       </div>
     </div>
   );

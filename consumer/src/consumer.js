@@ -129,7 +129,7 @@ const processDriverFeedback = async (feedbacks, alpha, threshold, cooldown) => {
       const modelRating = predictedScore;
       const combinedScore = parseFloat(((starRating + modelRating) / 2).toFixed(2));
       
-      const sentiment = getSentimentLabel(combinedScore);
+      const sentiment = getSentimentLabel(combinedScore, threshold);
       
       if (i < 3) {
         console.log(`   Feedback ${i+1}: star=${starRating}, model=${modelRating.toFixed(2)}, combined=${combinedScore}, sentiment=${sentiment}`);
